@@ -523,16 +523,27 @@ function initFirebase(){
 }
 
 function tryAutoConnectFirebase(){
-  const apiKey = localStorage.getItem('fb_apiKey');
-  const projectId = localStorage.getItem('fb_projectId');
-  if(!apiKey||!projectId) return;
-  document.getElementById('fbApiKey').value = apiKey;
-  document.getElementById('fbProjectId').value = projectId;
+  // Credenciais fixas — conecta automaticamente ao abrir
+  const FIREBASE_CONFIG = {
+    apiKey: "AIzaSyDjcFKzHWpk4hOX0sBz-C43e2rD0FIlTb8",
+    authDomain: "gatuninhos-4bb0d.firebaseapp.com",
+    projectId: "gatuninhos-4bb0d",
+  };
+  // Preenche os campos de config (visual)
+  document.getElementById('fbApiKey').value = FIREBASE_CONFIG.apiKey;
+  document.getElementById('fbProjectId').value = FIREBASE_CONFIG.projectId;
   try {
-    const app = firebase.initializeApp({ apiKey, projectId, authDomain: projectId+'.firebaseapp.com' });
+    const app = firebase.initializeApp(FIREBASE_CONFIG);
     S.db = firebase.firestore(app);
     startFirebaseSync();
-  } catch(e) {}
+    document.getElementById('fbStatus').innerHTML='<span style="color:var(--accent)">✓ Conectado automaticamente!</span>';
+  } catch(e) {
+    // Se já inicializado, pega a instância existente
+    try {
+      S.db = firebase.firestore();
+      startFirebaseSync();
+    } catch(e2) {}
+  }
 }
 
 function startFirebaseSync(){
