@@ -523,45 +523,57 @@ function initFirebase(){
 }
 
 function tryAutoConnectFirebase(){
-  // Credenciais fixas — conecta automaticamente ao abrir
   const FIREBASE_CONFIG = {
     apiKey: "AIzaSyDjcFKzHWpk4hOX0sBz-C43e2rD0FIlTb8",
     authDomain: "gatuninhos-4bb0d.firebaseapp.com",
     projectId: "gatuninhos-4bb0d",
+    storageBucket: "gatuninhos-4bb0d.firebasestorage.app",
+    messagingSenderId: "1047701551614",
+    appId: "1:1047701551614:web:4aa7eb641018c54f3a68af"
   };
-  // Preenche os campos de config (visual)
   document.getElementById('fbApiKey').value = FIREBASE_CONFIG.apiKey;
   document.getElementById('fbProjectId').value = FIREBASE_CONFIG.projectId;
   try {
-    const app = firebase.initializeApp(FIREBASE_CONFIG);
-    S.db = firebase.firestore(app);
-    startFirebaseSync();
-    document.getElementById('fbStatus').innerHTML='<span style="color:var(--accent)">✓ Conectado automaticamente!</span>';
-  } catch(e) {
-    // Se já inicializado, pega a instância existente
+    let app;
     try {
-      S.db = firebase.firestore();
-      startFirebaseSync();
-    } catch(e2) {}
+      app = firebase.initializeApp(FIREBASE_CONFIG);
+    } catch(e) {
+      app = firebase.app(); // já inicializado
+    }
+    S.db = firebase.firestore(app);
+    // Força uso do servidor — não usa cache local
+    S.db.settings({ cacheSizeBytes: firebase.firestore.CACHE_SIZE_UNLIMITED });
+    startFirebaseSync();
+    document.getElementById('fbStatus').innerHTML='<span style="color:var(--accent)">✓ Conectado!</span>';
+  } catch(e) {
+    console.error('Firebase erro:', e);
+    document.getElementById('fbStatus').innerHTML='<span style="color:var(--red)">Erro: '+e.message+'</span>';
   }
 }
 
 function startFirebaseSync(){
   const dot = document.getElementById('syncDot');
   dot.classList.add('syncing');
-  // Listen to entries
-  S.db.collection('data').doc('main').onSnapshot(doc=>{
-    if(doc.exists){
-      const d = doc.data();
-      if(d.entries) DB.entries = d.entries;
-      if(d.parcelas) DB.parcelas = d.parcelas;
-      if(d.custos) DB.custos = d.custos;
-      saveLocal();
-      renderAll();
-    }
+  S.db.collection('data').doc('main').onSnapshot({includeMetadataChanges: false}, doc=>{
     dot.classList.remove('syncing');
     dot.classList.add('connected');
-  }, ()=>{ dot.classList.remove('syncing','connected'); });
+    if(doc.exists){
+      const d = doc.data();
+      // Só atualiza se veio do servidor (não do cache local)
+      if(!doc.metadata.fromCache){
+        if(d.entries !== undefined) DB.entries = d.entries;
+        if(d.parcelas !== undefined) DB.parcelas = d.parcelas;
+        if(d.custos !== undefined) DB.custos = d.custos;
+        saveLocal();
+        renderAll();
+        showToast('Sincronizado ✓', 'ok');
+      }
+    }
+  }, err=>{
+    dot.classList.remove('syncing','connected');
+    console.error('Sync erro:', err);
+    showToast('Erro de conexão', 'err');
+  });
 }
 
 function pushFirebase(){
@@ -573,8 +585,14 @@ function pushFirebase(){
     parcelas: DB.parcelas,
     custos: DB.custos,
     updatedAt: new Date().toISOString()
-  }).then(()=>{ dot.classList.remove('syncing'); dot.classList.add('connected'); })
-    .catch(()=>{ dot.classList.remove('syncing'); });
+  }).then(()=>{
+    dot.classList.remove('syncing');
+    dot.classList.add('connected');
+  }).catch(err=>{
+    dot.classList.remove('syncing');
+    console.error('Push erro:', err);
+    showToast('Erro ao salvar na nuvem', 'err');
+  });
 }
 
 // ===========================
